@@ -28,7 +28,6 @@
             font-weight: bold;
         }
 
-        /* Short sub-header description */
         #header-desc {
             text-align: center;
             font-size: 2vh;
@@ -38,7 +37,6 @@
             letter-spacing: 1px;
         }
 
-        /* Side-by-Side Monitoring Grid panels */
         #main-monitor-zone {
             display: flex;
             flex: 1;
@@ -46,7 +44,6 @@
             height: 75vh;
         }
 
-        /* Live Intercept Feed Panel (Now on Top Left) */
         #feed-container {
             flex: 1.2;
             background-color: #050505;
@@ -58,7 +55,6 @@
             flex-direction: column;
         }
 
-        /* Live Tracker Leaderboard Display Panel (On the Right) */
         #tracker-panel {
             flex: 1;
             background-color: #111;
@@ -90,6 +86,7 @@
             line-height: 1.5;
         }
 
+        /* Upgraded Team Row for Dropdown */
         .team-row {
             display: flex;
             justify-content: space-between;
@@ -97,7 +94,38 @@
             padding: 1.8vh;
             border-bottom: 1px solid #222;
             font-size: 2.4vh;
+            cursor: pointer;
+            transition: background-color 0.2s;
         }
+        .team-row:hover { background-color: #1a1a1a; }
+        
+        .dropdown-icon {
+            font-size: 1.8vh;
+            color: #888;
+            margin-right: 1vw;
+            display: inline-block;
+            width: 2vw;
+            text-align: center;
+        }
+
+        /* Individual Player Sub-row Styling */
+        .team-details {
+            background-color: #0a0a0a;
+            border-left: 3px solid #00bcff;
+            margin-bottom: 1vh;
+            padding-left: 1vw;
+        }
+
+        .player-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.2vh 1.8vh;
+            border-bottom: 1px dotted #222;
+            font-size: 1.9vh;
+            color: #ccc;
+        }
+        .player-row:last-child { border-bottom: none; }
         
         .status-active { color: #00bcff; font-weight: bold; }
         .status-boom { color: #ff3333; font-weight: bold; text-shadow: 0 0 5px #ff0000; }
@@ -130,6 +158,9 @@
     <script>
         const socket = io();
         const logBox = document.getElementById("feed-log");
+        
+        // Memory structure to keep team dropdowns open during live data refreshes
+        const expandedTeams = new Set();
 
         function addLogMessage(htmlContent) {
             const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -137,15 +168,33 @@
             logBox.scrollTop = logBox.scrollHeight;
         }
 
+        // Toggles the accordion display state for individual squad breakdown
+        window.toggleTeam = function(teamName, safeId) {
+            const detailsDiv = document.getElementById(`details-${safeId}`);
+            const icon = document.getElementById(`icon-${safeId}`);
+            if (expandedTeams.has(teamName)) {
+                expandedTeams.delete(teamName);
+                if (detailsDiv) detailsDiv.style.display = 'none';
+                if (icon) icon.innerText = '▶';
+            } else {
+                expandedTeams.add(teamName);
+                if (detailsDiv) detailsDiv.style.display = 'block';
+                if (icon) icon.innerText = '▼';
+            }
+        };
+
         socket.on('agentJoined', (data) => {
-            addLogMessage(`<span class="log-join">⚡ Squad Joined: <strong>${data.team}</strong></span>`);
+            let displayName = data.username ? `<strong>${data.username}</strong> (Squad: <strong>${data.team}</strong>)` : `<strong>${data.team}</strong>`;
+            addLogMessage(`<span class="log-join">⚡ Agent Joined: ${displayName}</span>`);
         });
 
         socket.on('check', (data) => {
+            let actorName = data.username ? `<strong>${data.username} (${data.team})</strong>` : `<strong>${data.team}</strong>`;
+            
             if (data.status === 'correct') {
-                addLogMessage(`<span class="log-correct">🔓 DEFUSE SUCCESS: <strong>${data.team}</strong> cleared phase ${data.stage}!</span>`);
+                addLogMessage(`<span class="log-correct">🔓 DEFUSE SUCCESS: ${actorName} cleared phase ${data.stage}!</span>`);
             } else if (data.status === 'incorrect') {
-                addLogMessage(`<span class="log-wrong">❌ FIREWALL TRIPPED: <strong>${data.team}</strong> fed corrupt code "${data.answer}". -10s penalty!</span>`);
+                addLogMessage(`<span class="log-wrong">❌ FIREWALL TRIPPED: ${actorName} fed corrupt code "${data.answer}". -10s penalty!</span>`);
             } else if (data.status === 'boom') {
                 addLogMessage(`<span class="log-wrong">💥 You FAILED: <strong>${data.team}'s</strong> BOMB DETONATED</span>`);
             } else if (data.status === 'defused') {
@@ -153,33 +202,122 @@
             }
         });
 
-        // Processes and displays the server-sorted team tracking list array
         socket.on('leaderboardUpdate', (teamList) => {
-            const container = document.getElementById('leaderboard-target');
-            if (teamList.length === 0) {
-                container.innerHTML = `<div style="text-align:center; padding-top:10vh; color:#555;">No active networks detected. Awaiting deployment...</div>`;
-                return;
+        const container = document.getElementById('leaderboard-target');
+        if (teamList.length === 0) {
+            container.innerHTML = `<div style="text-align:center; padding-top:10vh; color:#555;">No active networks detected. Awaiting deployment...</div>`;
+            return;
+        }
+
+        const groupedTeams = {};
+        teamList.forEach(player => {
+            if (!groupedTeams[player.team]) {
+                groupedTeams[player.team] = [];
+            }
+            groupedTeams[player.team].push(player);
+        });
+
+        const compiledTeams = [];
+        for (const teamName in groupedTeams) {
+            const members = groupedTeams[teamName];
+            const n = members.length;
+
+            let totalScore = 0;
+            let totalTime = 0; // 1. Set up a variable to track the squad's total seconds
+            let maxIndex = 0;
+            let activeCount = 0;
+            let boomCount = 0;
+
+            members.forEach(m => {
+                totalScore += m.currentIndex * (100 / n);
+                totalTime += m.timeLeft; // 2. Add each member's time to the total
+
+                if (m.currentIndex > maxIndex) maxIndex = m.currentIndex;
+                if (m.status === 'active') activeCount++;
+                if (m.status === 'boom') boomCount++;
+            });
+
+            let aggregateStatus = 'defused';
+            if (activeCount > 0) {
+                aggregateStatus = 'active';
+            } else if (boomCount === n) {
+                aggregateStatus = 'boom';
             }
 
-            container.innerHTML = '';
-            teamList.forEach(t => {
-                let statusText = '';
-                let min = Math.floor(t.timeLeft / 60);
-                let sec = t.timeLeft % 60;
-                let formattedTime = `${min < 10 ? '0' + min : min}:${sec < 10 ? '0' + sec : sec}`;
+            compiledTeams.push({
+                team: teamName,
+                score: Math.round(totalScore),
+                avgTimeLeft: totalTime / n, // 3. Calculate average time for the tiebreaker
+                maxIndex: maxIndex,
+                status: aggregateStatus,
+                members: members,
+                n: n
+            });
+        }
 
+        // 4. UPDATED SORTING ALGORITHM WITH TIEBREAKER
+        compiledTeams.sort((a, b) => {
+            // Primary Sort: Highest Score Wins
+            if (b.score !== a.score) {
+                return b.score - a.score; 
+            }
+            // Tiebreaker: Highest Average Time Left Wins
+            return b.avgTimeLeft - a.avgTimeLeft; 
+        });
+
+        // ... (The rest of the rendering code remains exactly the same starting at container.innerHTML = '';)
+        container.innerHTML = '';
+        compiledTeams.forEach(t => {
+                // Team level visual tracking (Timer removed)
+                let statusText = '';
                 if (t.status === 'active') {
-                    statusText = `<span class="status-active">Q${t.currentIndex + 1} [🕒 ${formattedTime}]</span>`;
+                    statusText = `<span class="status-active">${t.score} PTS</span>`;
                 } else if (t.status === 'boom') {
-                    statusText = `<span class="status-boom">💥 DETONATED</span>`;
+                    statusText = `<span class="status-boom">[🏆 ${t.score} PTS] 💥 DETONATED</span>`;
                 } else if (t.status === 'defused') {
-                    statusText = `<span class="status-defused">🛡️ SAFE</span>`;
+                    statusText = `<span class="status-defused">[🏆 ${t.score} PTS] 🛡️ SAFE</span>`;
                 }
 
+                const isExpanded = expandedTeams.has(t.team);
+                const displayStyle = isExpanded ? 'block' : 'none';
+                const iconText = isExpanded ? '▼' : '▶';
+                
+                // Safe ID generation for DOM targeting
+                const safeTeamId = 't_' + t.team.replace(/[^a-zA-Z0-9]/g, '_');
+                const safeTeamNameStr = t.team.replace(/'/g, "\\'");
+
+                // Build Individual Player Tracking block
+                let playersHtml = '';
+                t.members.forEach(m => {
+                    let pMin = Math.floor(m.timeLeft / 60);
+                    let pSec = m.timeLeft % 60;
+                    let pTime = `${pMin < 10 ? '0' + pMin : pMin}:${pSec < 10 ? '0' + pSec : pSec}`;
+                    let pScore = Math.round(m.currentIndex * (100 / t.n));
+                    
+                    let pStatusClass = '';
+                    if(m.status === 'boom') pStatusClass = 'color: #ff3333; font-weight: bold; text-shadow: 0 0 5px #ff0000;';
+                    if(m.status === 'defused') pStatusClass = 'color: #00ff66; font-weight: bold; text-shadow: 0 0 5px #00ff66;';
+                    if(m.status === 'active') pStatusClass = 'color: #aaa;';
+
+                    playersHtml += `
+                        <div class="player-row">
+                            <span>👤 ${m.username || 'Agent'}</span>
+                            <span style="${pStatusClass}">[🏆 ${pScore} PTS] Q${m.currentIndex + 1} [🕒 ${pTime}]</span>
+                        </div>
+                    `;
+                });
+
+                // Inject Dropdown structure into the DOM
                 container.innerHTML += `
-                    <div class="team-row">
-                        <strong>⚡ ${t.team}</strong>
+                    <div class="team-row" onclick="toggleTeam('${safeTeamNameStr}', '${safeTeamId}')">
+                        <div>
+                            <span id="icon-${safeTeamId}" class="dropdown-icon">${iconText}</span>
+                            <strong>⚡ ${t.team}</strong>
+                        </div>
                         ${statusText}
+                    </div>
+                    <div id="details-${safeTeamId}" class="team-details" style="display: ${displayStyle};">
+                        ${playersHtml}
                     </div>
                 `;
             });

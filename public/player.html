@@ -74,6 +74,7 @@
     
     <div id="auth-overlay">
         <h1>⚠️ Algebraic Skills Activity </h1>
+        <input type="text" id="username-input" placeholder="ENTER YOUR USERNAME..." style="margin-bottom: 2vh; border-color: #333; text-align: center;">
         <input type="text" id="team-name-input" placeholder="ENTER SQUAD NAME..." style="margin-bottom: 3vh; border-color: #333; text-align: center;">
         <button onclick="engageSystem()">START DEFUSAL</button>
     </div>
@@ -94,15 +95,25 @@
 
     <script>
         const socket = io();
-        let cooldownInterval; // Holds the visual countdown thread
+        let cooldownInterval; 
+        
+        window.currentUsername = "";
+        window.currentTeam = "";
 
         function engageSystem() {
             const squadName = document.getElementById('team-name-input').value.trim();
-            if (!squadName) {
-                alert("NAME REJECTED. ENTER A VALID TEAM NAME.");
+            const usernameVal = document.getElementById('username-input').value.trim();
+            
+            if (!squadName || !usernameVal) {
+                alert("ENTRY REJECTED. ENTER BOTH A VALID USERNAME AND SQUAD NAME.");
                 return;
             }
-            socket.emit('registerTeam', { team: squadName });
+            
+            window.currentUsername = usernameVal;
+            window.currentTeam = squadName;
+
+            socket.emit('registerTeam', { team: squadName, username: usernameVal });
+            
             document.getElementById('auth-overlay').style.display = 'none';
             document.getElementById('game-view').style.display = 'block';
             document.getElementById('player-answer').focus();
@@ -111,9 +122,13 @@
         function transmitCode() {
             const answerField = document.getElementById("player-answer");
             const guessValue = answerField.value.trim();
-            if(!guessValue || answerField.disabled) return; // Prevent submission while locked out
+            if(!guessValue || answerField.disabled) return; 
 
-            socket.emit('submit', { answer: guessValue });
+            socket.emit('submit', { 
+                answer: guessValue,
+                username: window.currentUsername,
+                team: window.currentTeam
+            });
             answerField.value = ""; 
         }
 
@@ -129,7 +144,6 @@
             document.getElementById("question-box").innerHTML = questionText;
         });
 
-        // Handle incoming response indicators
         socket.on('feedback', (data) => {
             const feedPnl = document.getElementById("feedback-pnl");
             const answerField = document.getElementById("player-answer");
@@ -138,13 +152,11 @@
             if (data.status === 'incorrect') {
                 feedPnl.style.color = '#ff3333';
 
-                // 1. Physically lock down user elements
                 answerField.disabled = true;
                 transmitBtn.disabled = true;
                 transmitBtn.style.opacity = "0.4";
                 transmitBtn.style.cursor = "not-allowed";
 
-                // 2. Fire local 10-second ticker lockout loops
                 let secondsLeft = 10;
                 feedPnl.innerHTML = `❌ INVALID CODE! TERMINAL LOCKED FOR ${secondsLeft}s (-10s Core Drain)`;
 
@@ -152,7 +164,6 @@
                 cooldownInterval = setInterval(() => {
                     secondsLeft--;
                     if (secondsLeft <= 0) {
-                        // 3. Clear restrictions on completion
                         clearInterval(cooldownInterval);
                         answerField.disabled = false;
                         transmitBtn.disabled = false;
@@ -197,7 +208,6 @@
             }
         });
 
-        // Trigger code transmission via Enter key press
         document.getElementById("player-answer").addEventListener("keyup", function(event) {
             if (event.key === "Enter") { transmitCode(); }
         });
