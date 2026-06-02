@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Bomb Defusal</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            background-color: #0d0d0d; 
+            color: #e0e0e0;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            height: 100vh;
+            overflow: hidden; 
+        }
+
+        /* Initialization Entry Screen Styles */
+        #auth-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background-color: #0d0d0d; z-index: 999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        #auth-overlay h1 { color: #ff3333; text-shadow: 0 0 10px #ff0000; margin-bottom: 3vh; font-size: 4vh; }
+
+        /* Game System View Elements */
+        #game-view { display: none; width: 100vw; height: 100vh; position: relative; }
+
+        #bomb {
+            position: absolute; top: 20%; left: 20%; transform: translateX(-50%);
+            height: 32vh; width: auto;
+            border: 0.4vh solid #e00d0d; border-radius: 1vh; box-sizing: border-box;
+        }
+
+        #timer {
+            position: absolute; top: 5%; left: 20%; transform: translateX(-50%); 
+            font-size: 11vh; color: #ff3333; text-shadow: 0 0 3vh #ff0000;
+            font-weight: bold; line-height: 1;
+        }
+
+        #question-box {
+            position: absolute; top: 10%; left: 35%; width: 55vw; height: 50vh; 
+            background-color: #1a1a1a; border: 0.4vh solid #333; border-radius: 1vh; 
+            padding: 2vh; box-sizing: border-box; font-size: 3.5vh; 
+            display: flex; align-items: center; justify-content: center; text-align: center;
+        }
+
+        #control-panel {
+            position: absolute; bottom: 15%; left: 62%; transform: translateX(-50%);
+            display: flex; gap: 2vw;
+        }
+
+        input[type="text"] {
+            background-color: #151515; color: #00ff66; border: 0.3vh solid #ff3333; 
+            padding: 2vh 2.5vw; font-size: 3vh; font-family: 'Courier New', monospace;
+            width: 25vw; outline: none; box-shadow: 0 0 1.5vh rgba(255, 51, 51, 0.2);
+        }
+        input[type="text"]:focus { border-color: #00ff66; box-shadow: 0 0 2vh rgba(0, 255, 102, 0.4); }
+
+        button {
+            background-color: #222; color: #ff3333; border: 0.3vh solid #ff3333;
+            padding: 2vh 4vw; font-size: 3vh; font-family: 'Courier New', monospace;
+            cursor: pointer; font-weight: bold; transition: all 0.2s ease;
+        }
+        button:hover { background-color: #ff3333; color: #000; box-shadow: 0 0 3vh #ff3333; }
+        
+        #feedback-pnl {
+            position: absolute; bottom: 5%; left: 62%; transform: translateX(-50%);
+            font-size: 2.2vh; font-weight: bold; text-align: center; width: 50vw;
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="auth-overlay">
+        <h1>⚠️ Algebraic Skills Activity </h1>
+        <input type="text" id="team-name-input" placeholder="ENTER SQUAD NAME..." style="margin-bottom: 3vh; border-color: #333; text-align: center;">
+        <button onclick="engageSystem()">START DEFUSAL</button>
+    </div>
+
+    <div id="game-view">
+        <img src="bomb.png" id="bomb" alt="Bomb failed to load but alr pretend its there">
+        <div id="timer">02:30</div>
+        
+        <div id="question-box">Synchronizing encryption keys...</div>
+
+        <div id="control-panel">
+            <input type="text" id="player-answer" placeholder="Enter answer..." autocomplete="off">
+            <button id="transmit-btn" onclick="transmitCode()">DEFUSE</button>
+        </div>
+
+        <div id="feedback-pnl"></div>
+    </div>
+
+    <script>
+        const socket = io();
+        let cooldownInterval; // Holds the visual countdown thread
+
+        function engageSystem() {
+            const squadName = document.getElementById('team-name-input').value.trim();
+            if (!squadName) {
+                alert("NAME REJECTED. ENTER A VALID TEAM NAME.");
+                return;
+            }
+            socket.emit('registerTeam', { team: squadName });
+            document.getElementById('auth-overlay').style.display = 'none';
+            document.getElementById('game-view').style.display = 'block';
+            document.getElementById('player-answer').focus();
+        }
+
+        function transmitCode() {
+            const answerField = document.getElementById("player-answer");
+            const guessValue = answerField.value.trim();
+            if(!guessValue || answerField.disabled) return; // Prevent submission while locked out
+
+            socket.emit('submit', { answer: guessValue });
+            answerField.value = ""; 
+        }
+
+        socket.on('timerUpdate', (time) => {
+            if (time < 0) time = 0;
+            let minutes = Math.floor(time / 60);
+            let seconds = time % 60;
+            document.getElementById("timer").innerText = 
+                `${minutes < 10 ? '0' + minutes : minutes}:${seconds < 10 ? '0' + seconds : seconds}`;
+        });
+
+        socket.on('newQuestion', (questionText) => {
+            document.getElementById("question-box").innerHTML = questionText;
+        });
+
+        // Handle incoming response indicators
+        socket.on('feedback', (data) => {
+            const feedPnl = document.getElementById("feedback-pnl");
+            const answerField = document.getElementById("player-answer");
+            const transmitBtn = document.getElementById("transmit-btn");
+
+            if (data.status === 'incorrect') {
+                feedPnl.style.color = '#ff3333';
+
+                // 1. Physically lock down user elements
+                answerField.disabled = true;
+                transmitBtn.disabled = true;
+                transmitBtn.style.opacity = "0.4";
+                transmitBtn.style.cursor = "not-allowed";
+
+                // 2. Fire local 10-second ticker lockout loops
+                let secondsLeft = 10;
+                feedPnl.innerHTML = `❌ INVALID CODE! TERMINAL LOCKED FOR ${secondsLeft}s (-10s Core Drain)`;
+
+                clearInterval(cooldownInterval);
+                cooldownInterval = setInterval(() => {
+                    secondsLeft--;
+                    if (secondsLeft <= 0) {
+                        // 3. Clear restrictions on completion
+                        clearInterval(cooldownInterval);
+                        answerField.disabled = false;
+                        transmitBtn.disabled = false;
+                        transmitBtn.style.opacity = "1";
+                        transmitBtn.style.cursor = "pointer";
+                        feedPnl.innerHTML = "Next attempt ready";
+                        feedPnl.style.color = '#00ff66';
+                        answerField.focus();
+                    } else {
+                        feedPnl.innerHTML = `❌ Terminal locked for ${secondsLeft}s`;
+                    }
+                }, 1000);
+
+            } else if (data.status === 'correct') {
+                clearInterval(cooldownInterval);
+                answerField.disabled = false;
+                transmitBtn.disabled = false;
+                transmitBtn.style.opacity = "1";
+                transmitBtn.style.cursor = "pointer";
+                feedPnl.innerHTML = data.message;
+                feedPnl.style.color = '#00ff66';
+                answerField.focus();
+            } else {
+                feedPnl.innerHTML = data.message;
+            }
+        });
+
+        socket.on('gameOver', (data) => {
+            clearInterval(cooldownInterval);
+            document.getElementById("control-panel").style.display = "none";
+            const qBox = document.getElementById("question-box");
+            const timerEl = document.getElementById("timer");
+
+            if (data.status === 'boom') {
+                timerEl.innerText = "BOOM!";
+                qBox.innerHTML = "<span style='color: #ff3333;'>THE BOMB EXPLODED</span>";
+            } else {
+                timerEl.innerText = "SAFE";
+                timerEl.style.color = "#00ff66";
+                timerEl.style.textShadow = "0 0 3vh #00ff66";
+                qBox.innerHTML = "<span style='color: #00ff66;'>CLEARED.<br>BOMB DEFUSED SUCCESSFULLY!</span>";
+            }
+        });
+
+        // Trigger code transmission via Enter key press
+        document.getElementById("player-answer").addEventListener("keyup", function(event) {
+            if (event.key === "Enter") { transmitCode(); }
+        });
+    </script>
+</body>
+</html>

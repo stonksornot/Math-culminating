@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Bomb Defusal - CONTROL CENTER</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            background-color: #0d0d0d; 
+            color: #e0e0e0;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            padding: 3vh;
+            overflow: hidden;
+        }
+
+        #header-title {
+            text-align: center;
+            font-size: 4.5vh;
+            color: #ff3333;
+            text-shadow: 0 0 15px #ff0000;
+            margin: 0;
+            font-weight: bold;
+        }
+
+        /* Short sub-header description */
+        #header-desc {
+            text-align: center;
+            font-size: 2vh;
+            color: #888;
+            margin: 1vh 0 3vh 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Side-by-Side Monitoring Grid panels */
+        #main-monitor-zone {
+            display: flex;
+            flex: 1;
+            gap: 2vw;
+            height: 75vh;
+        }
+
+        /* Live Intercept Feed Panel (Now on Top Left) */
+        #feed-container {
+            flex: 1.2;
+            background-color: #050505;
+            border: 3px solid #ff3333;
+            border-radius: 8px;
+            padding: 2.5vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Live Tracker Leaderboard Display Panel (On the Right) */
+        #tracker-panel {
+            flex: 1;
+            background-color: #111;
+            border: 3px solid #333;
+            border-radius: 8px;
+            padding: 2.5vh;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+
+        .box-lbl { 
+            font-size: 2vh; 
+            color: #ff3333; 
+            margin-top: 0;
+            margin-bottom: 2vh; 
+            text-transform: uppercase; 
+            letter-spacing: 2px;
+            font-weight: bold;
+            border-bottom: 2px solid #222;
+            padding-bottom: 1vh;
+        }
+
+        #feed-log {
+            font-size: 1.9vh;
+            flex: 1;
+            overflow-y: auto;
+            text-align: left;
+            color: #aaa;
+            line-height: 1.5;
+        }
+
+        .team-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.8vh;
+            border-bottom: 1px solid #222;
+            font-size: 2.4vh;
+        }
+        
+        .status-active { color: #00bcff; font-weight: bold; }
+        .status-boom { color: #ff3333; font-weight: bold; text-shadow: 0 0 5px #ff0000; }
+        .status-defused { color: #00ff66; font-weight: bold; text-shadow: 0 0 5px #00ff66; }
+
+        .log-join { color: #00bcff; }
+        .log-correct { color: #00ff66; }
+        .log-wrong { color: #ff3333; }
+    </style>
+</head>
+<body>
+
+    <div id="header-title"> Bomb defusal game</div>
+    <div id="header-desc">Answer the questions correctly to advance. Bomb will explode if timer runs out</div>
+
+    <div id="main-monitor-zone">
+        <div id="feed-container">
+            <div class="box-lbl">📡 Live Submission Stream</div>
+            <div id="feed-log"></div>
+        </div>
+
+        <div id="tracker-panel">
+            <div class="box-lbl" style="color: #00bcff;">Squad Standings</div>
+            <div id="leaderboard-target">
+                <div style="text-align:center; padding-top:10vh; color:#555;">No active squads detected. Awaiting deployment...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const logBox = document.getElementById("feed-log");
+
+        function addLogMessage(htmlContent) {
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            logBox.innerHTML += `[${timestamp}] ${htmlContent}<br>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        socket.on('agentJoined', (data) => {
+            addLogMessage(`<span class="log-join">⚡ Squad Joined: <strong>${data.team}</strong></span>`);
+        });
+
+        socket.on('check', (data) => {
+            if (data.status === 'correct') {
+                addLogMessage(`<span class="log-correct">🔓 DEFUSE SUCCESS: <strong>${data.team}</strong> cleared phase ${data.stage}!</span>`);
+            } else if (data.status === 'incorrect') {
+                addLogMessage(`<span class="log-wrong">❌ FIREWALL TRIPPED: <strong>${data.team}</strong> fed corrupt code "${data.answer}". -10s penalty!</span>`);
+            } else if (data.status === 'boom') {
+                addLogMessage(`<span class="log-wrong">💥 You FAILED: <strong>${data.team}'s</strong> BOMB DETONATED</span>`);
+            } else if (data.status === 'defused') {
+                addLogMessage(`<span class="log-correct">🛡️ SAFE: <strong>${data.team}</strong> defused their bomb completely!</span>`);
+            }
+        });
+
+        // Processes and displays the server-sorted team tracking list array
+        socket.on('leaderboardUpdate', (teamList) => {
+            const container = document.getElementById('leaderboard-target');
+            if (teamList.length === 0) {
+                container.innerHTML = `<div style="text-align:center; padding-top:10vh; color:#555;">No active networks detected. Awaiting deployment...</div>`;
+                return;
+            }
+
+            container.innerHTML = '';
+            teamList.forEach(t => {
+                let statusText = '';
+                let min = Math.floor(t.timeLeft / 60);
+                let sec = t.timeLeft % 60;
+                let formattedTime = `${min < 10 ? '0' + min : min}:${sec < 10 ? '0' + sec : sec}`;
+
+                if (t.status === 'active') {
+                    statusText = `<span class="status-active">Q${t.currentIndex + 1} [🕒 ${formattedTime}]</span>`;
+                } else if (t.status === 'boom') {
+                    statusText = `<span class="status-boom">💥 DETONATED</span>`;
+                } else if (t.status === 'defused') {
+                    statusText = `<span class="status-defused">🛡️ SAFE</span>`;
+                }
+
+                container.innerHTML += `
+                    <div class="team-row">
+                        <strong>⚡ ${t.team}</strong>
+                        ${statusText}
+                    </div>
+                `;
+            });
+        });
+    </script>
+</body>
+</html>
