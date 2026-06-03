@@ -3,94 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Math Bomb Defusal</title>
+    <title>Math Bomb Defusal - Agent Map</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body {
-            background-color: #0d0d0d; 
-            color: #e0e0e0;
-            font-family: 'Courier New', Courier, monospace;
-            margin: 0;
-            height: 100vh;
-            overflow: hidden; 
-        }
-
-        /* Initialization Entry Screen Styles */
-        #auth-overlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background-color: #0d0d0d; z-index: 999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-        }
+        body { background-color: #0d0d0d; color: #e0e0e0; font-family: 'Courier New', Courier, monospace; margin: 0; height: 100vh; overflow: hidden; }
+        #auth-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #0d0d0d; z-index: 999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         #auth-overlay h1 { color: #ff3333; text-shadow: 0 0 10px #ff0000; margin-bottom: 3vh; font-size: 4vh; }
-
-        /* Game System View Elements */
         #game-view { display: none; width: 100vw; height: 100vh; position: relative; }
-
-        #bomb {
-            position: absolute; top: 20%; left: 20%; transform: translateX(-50%);
-            height: 32vh; width: auto;
-            border: 0.4vh solid #e00d0d; border-radius: 1vh; box-sizing: border-box;
-        }
-
-        #timer {
-            position: absolute; top: 5%; left: 20%; transform: translateX(-50%); 
-            font-size: 11vh; color: #ff3333; text-shadow: 0 0 3vh #ff0000;
-            font-weight: bold; line-height: 1;
-        }
-
-        #question-box {
-            position: absolute; top: 10%; left: 35%; width: 55vw; height: 50vh; 
-            background-color: #1a1a1a; border: 0.4vh solid #333; border-radius: 1vh; 
-            padding: 2vh; box-sizing: border-box; font-size: 3.5vh; 
-            display: flex; align-items: center; justify-content: center; text-align: center;
-        }
-
-        #control-panel {
-            position: absolute; bottom: 15%; left: 62%; transform: translateX(-50%);
-            display: flex; gap: 2vw;
-        }
-
-        input[type="text"] {
-            background-color: #151515; color: #00ff66; border: 0.3vh solid #ff3333; 
-            padding: 2vh 2.5vw; font-size: 3vh; font-family: 'Courier New', monospace;
-            width: 25vw; outline: none; box-shadow: 0 0 1.5vh rgba(255, 51, 51, 0.2);
-        }
-        input[type="text"]:focus { border-color: #00ff66; box-shadow: 0 0 2vh rgba(0, 255, 102, 0.4); }
-
-        button {
-            background-color: #222; color: #ff3333; border: 0.3vh solid #ff3333;
-            padding: 2vh 4vw; font-size: 3vh; font-family: 'Courier New', monospace;
-            cursor: pointer; font-weight: bold; transition: all 0.2s ease;
-        }
-        button:hover { background-color: #ff3333; color: #000; box-shadow: 0 0 3vh #ff3333; }
+        #timer { position: absolute; top: 2%; left: 50%; transform: translateX(-50%); font-size: 7vh; color: #ff3333; text-shadow: 0 0 3vh #ff0000; font-weight: bold; line-height: 1; z-index: 10; }
         
-        #feedback-pnl {
-            position: absolute; bottom: 5%; left: 62%; transform: translateX(-50%);
-            font-size: 2.2vh; font-weight: bold; text-align: center; width: 50vw;
-        }
+        /* Map scaling container */
+        #map-container { position: absolute; top: 12%; left: 0; width: 100%; height: 85%; display: flex; justify-content: center; align-items: center; }
+        #radar-map { width: 100%; height: 100%; object-fit: contain; background-color: #050505; border: 0.4vh solid #00bcff; border-radius: 1vh; box-shadow: 0 0 2vh rgba(0, 188, 255, 0.2); }
+        
+        #defusal-interface { display: none; }
+        #question-box { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); width: 55vw; height: 40vh; background-color: #1a1a1a; border: 0.4vh solid #333; border-radius: 1vh; padding: 2vh; box-sizing: border-box; font-size: 3.5vh; display: flex; align-items: center; justify-content: center; text-align: center; }
+        #control-panel { position: absolute; bottom: 20%; left: 50%; transform: translateX(-50%); display: flex; gap: 2vw; }
+        input[type="text"] { background-color: #151515; color: #00ff66; border: 0.3vh solid #ff3333; padding: 2vh 2.5vw; font-size: 3vh; width: 25vw; outline: none; box-shadow: 0 0 1.5vh rgba(255, 51, 51, 0.2); }
+        input[type="text"]:focus { border-color: #00ff66; box-shadow: 0 0 2vh rgba(0, 255, 102, 0.4); }
+        button { background-color: #222; color: #ff3333; border: 0.3vh solid #ff3333; padding: 2vh 4vw; font-size: 3vh; cursor: pointer; font-weight: bold; transition: all 0.2s ease; }
+        button:hover { background-color: #ff3333; color: #000; box-shadow: 0 0 3vh #ff3333; }
+        #feedback-pnl { position: absolute; bottom: 10%; left: 50%; transform: translateX(-50%); font-size: 2.2vh; font-weight: bold; text-align: center; width: 50vw; }
     </style>
 </head>
 <body>
+    <div id="lobby-screen" style="display: none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
+        <h1 style="color:#00bcff; font-size:4vh; text-shadow:0 0 15px #00bcff; margin-bottom:1vh;">CONNECTION ESTABLISHED</h1>
+        <div style="color:#888; font-size:2vh;">WAITING FOR EVERYONE...</div>
+    </div>
     
     <div id="auth-overlay">
         <h1>⚠️ Algebraic Skills Activity </h1>
         <input type="text" id="username-input" placeholder="ENTER YOUR USERNAME..." style="margin-bottom: 2vh; border-color: #333; text-align: center;">
         <input type="text" id="team-name-input" placeholder="ENTER SQUAD NAME..." style="margin-bottom: 3vh; border-color: #333; text-align: center;">
-        <button onclick="engageSystem()">START DEFUSAL</button>
+        <button onclick="engageSystem()">START DEPLOYMENT</button>
     </div>
 
     <div id="game-view">
-        <img src="bomb.png" id="bomb" alt="Bomb failed to load but alr pretend its there">
         <div id="timer">02:30</div>
+        <div id="map-container"><canvas id="radar-map" width="1280" height="720"></canvas></div>
         
-        <div id="question-box">Synchronizing encryption keys...</div>
-
-        <div id="control-panel">
-            <input type="text" id="player-answer" placeholder="Enter answer..." autocomplete="off">
-            <button id="transmit-btn" onclick="transmitCode()">DEFUSE</button>
+        <div id="defusal-interface">
+            <div id="question-box">Synchronizing encryption keys...</div>
+            <div id="control-panel">
+                <input type="text" id="player-answer" placeholder="Enter answer..." autocomplete="off">
+                <button id="transmit-btn" onclick="transmitCode()">DEFUSE</button>
+            </div>
+            <div id="feedback-pnl"></div>
         </div>
-
-        <div id="feedback-pnl"></div>
     </div>
 
     <script>
@@ -99,49 +59,168 @@
         
         window.currentUsername = "";
         window.currentTeam = "";
+        window.activeQuestionId = null;
+
+        const canvas = document.getElementById('radar-map');
+        const ctx = canvas.getContext('2d');
+        let isNavigating = false; 
+        
+        let nodes = [];
+        let obstacles = []; 
+        let teammates = {}; // Track other players
+        
+        const player = { x: 640, y: 360, radius: 10, speed: 2, color: '#00ff66' };
+        const keys = { w: false, a: false, s: false, d: false };
+
+        window.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
 
         function engageSystem() {
             const squadName = document.getElementById('team-name-input').value.trim();
             const usernameVal = document.getElementById('username-input').value.trim();
-            
-            if (!squadName || !usernameVal) {
-                alert("ENTRY REJECTED. ENTER BOTH A VALID USERNAME AND SQUAD NAME.");
-                return;
-            }
-            
+
+            if (!squadName || !usernameVal) return alert("ENTRY REJECTED. ENTER BOTH A VALID USERNAME AND SQUAD NAME.");
+
             window.currentUsername = usernameVal;
             window.currentTeam = squadName;
 
-            socket.emit('registerTeam', { team: squadName, username: usernameVal });
-            
+            socket.emit('registerTeam', { username: usernameVal, team: squadName });
+            socket.emit('playerMovement', { x: player.x, y: player.y });
+
             document.getElementById('auth-overlay').style.display = 'none';
+            document.getElementById('lobby-screen').style.display = 'flex'; 
             document.getElementById('game-view').style.display = 'block';
+
+            // FIX: Lock the player in place while they wait in the lobby
+            isNavigating = false;
+            requestAnimationFrame(gameLoop);
+
+            socket.on('roundStarted', () => {
+                // 1. Drop the lobby screen
+                document.getElementById("lobby-screen").style.display = 'none';
+
+                // 2. FORCE the map to display (in case ghost inputs hid it)
+                document.getElementById("map-container").style.display = 'flex';
+                document.getElementById("defusal-interface").style.display = 'none';
+
+                // 3. Unlock player movement
+                isNavigating = true; 
+            });
+        }
+
+        // Listen for the next wave of nodes from the server
+        socket.on('nextWave', (newNodes) => {
+            nodes = newNodes;
+
+            // Optional: Flash a cool alert or message so the team knows!
+            const feedPnl = document.getElementById("feedback-pnl");
+            feedPnl.style.color = "#00bcff";
+            feedPnl.innerHTML = "WAVE CLEARED. NEW NODES INCOMING...";
+            setTimeout(() => { feedPnl.innerHTML = ""; }, 3000);
+        });
+
+        // Receive the shared map from the server
+        socket.on('initMap', (mapData) => {
+            obstacles = mapData.obstacles;
+            nodes = mapData.nodes;
+        });
+
+        // Track Teammate Movements
+        socket.on('teammateMoved', (data) => {
+            teammates[data.id] = data;
+        });
+
+        // Remove teammate if they disconnect
+        socket.on('teammateLeft', (id) => {
+            delete teammates[id];
+        });
+
+        // Listen for when a teammate solves a node
+        socket.on('nodeSolvedByTeammate', (data) => {
+            nodes = nodes.filter(n => n.id !== data.questionId);
+            
+            // If the player is currently looking at the node that was just solved, kick them back to map
+            if (window.activeQuestionId === data.questionId) {
+                alert(`NODE CLEARED BY SQUAD MEMBER: ${data.solvedBy}`);
+                returnToMap();
+            }
+        });
+
+        function gameLoop() {
+            // 1. REMOVE the early return so the map always draws!
+            // if (!isNavigating) return requestAnimationFrame(gameLoop); 
+
+            let nextX = player.x;
+            let nextY = player.y;
+            let moved = false;
+
+            // 2. Wrap movement logic inside the navigation check
+            if (isNavigating) {
+                if (keys.w) { nextY -= player.speed; moved = true; }
+                if (keys.s) { nextY += player.speed; moved = true; }
+                if (nextY - player.radius > 0 && nextY + player.radius < canvas.height && !checkWallCollision(player.x, nextY, player.radius)) {
+                    player.y = nextY;
+                }
+
+                if (keys.a) { nextX -= player.speed; moved = true; }
+                if (keys.d) { nextX += player.speed; moved = true; }
+                if (nextX - player.radius > 0 && nextX + player.radius < canvas.width && !checkWallCollision(nextX, player.y, player.radius)) {
+                    player.x = nextX;
+                }
+
+                if (moved) socket.emit('playerMovement', { x: player.x, y: player.y });
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // ... (Keep all your drawing code for Grid and Obstacles here) ...
+
+            // 3. Update the Nodes loop to prevent ghost collisions
+            nodes.forEach(node => {
+                ctx.beginPath(); ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+                ctx.fillStyle = node.color; ctx.fill();
+                ctx.shadowBlur = 15; ctx.shadowColor = node.color; ctx.closePath();
+
+                // Prevent triggering a defusal while trapped in the waiting lobby
+                if (isNavigating && Math.hypot(player.x - node.x, player.y - node.y) < player.radius + node.radius) {
+                    triggerDefusal(node);
+                }
+            });
+
+            // ... (Keep your Teammate and Player drawing code here) ...
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function triggerDefusal(node) {
+            isNavigating = false; 
+            window.activeQuestionId = node.id;
+            document.getElementById('question-box').innerHTML = node.text;
+            document.getElementById('map-container').style.display = 'none'; 
+            document.getElementById('defusal-interface').style.display = 'block'; 
             document.getElementById('player-answer').focus();
+        }
+
+        function returnToMap() {
+            window.activeQuestionId = null;
+            document.getElementById('defusal-interface').style.display = 'none'; 
+            document.getElementById('map-container').style.display = 'flex'; 
+            player.y += 25; // Bump out of collision
+            isNavigating = true; 
         }
 
         function transmitCode() {
             const answerField = document.getElementById("player-answer");
             const guessValue = answerField.value.trim();
-            if(!guessValue || answerField.disabled) return; 
+            if(!guessValue || answerField.disabled || window.activeQuestionId === null) return; 
 
-            socket.emit('submit', { 
-                answer: guessValue,
-                username: window.currentUsername,
-                team: window.currentTeam
-            });
+            socket.emit('submit', { answer: guessValue, questionId: window.activeQuestionId });
             answerField.value = ""; 
         }
 
         socket.on('timerUpdate', (time) => {
             if (time < 0) time = 0;
-            let minutes = Math.floor(time / 60);
-            let seconds = time % 60;
-            document.getElementById("timer").innerText = 
-                `${minutes < 10 ? '0' + minutes : minutes}:${seconds < 10 ? '0' + seconds : seconds}`;
-        });
-
-        socket.on('newQuestion', (questionText) => {
-            document.getElementById("question-box").innerHTML = questionText;
+            document.getElementById("timer").innerText = `${Math.floor(time / 60).toString().padStart(2, '0')}:${(time % 60).toString().padStart(2, '0')}`;
         });
 
         socket.on('feedback', (data) => {
@@ -151,48 +230,35 @@
 
             if (data.status === 'incorrect') {
                 feedPnl.style.color = '#ff3333';
-
-                answerField.disabled = true;
-                transmitBtn.disabled = true;
-                transmitBtn.style.opacity = "0.4";
-                transmitBtn.style.cursor = "not-allowed";
+                answerField.disabled = true; transmitBtn.disabled = true; transmitBtn.style.opacity = "0.4"; transmitBtn.style.cursor = "not-allowed";
 
                 let secondsLeft = 10;
-                feedPnl.innerHTML = `❌ INVALID CODE! TERMINAL LOCKED FOR ${secondsLeft}s (-10s Core Drain)`;
+                feedPnl.innerHTML = `❌ INVALID CODE! TERMINAL LOCKED FOR ${secondsLeft}s`;
 
                 clearInterval(cooldownInterval);
                 cooldownInterval = setInterval(() => {
                     secondsLeft--;
                     if (secondsLeft <= 0) {
                         clearInterval(cooldownInterval);
-                        answerField.disabled = false;
-                        transmitBtn.disabled = false;
-                        transmitBtn.style.opacity = "1";
-                        transmitBtn.style.cursor = "pointer";
-                        feedPnl.innerHTML = "Next attempt ready";
-                        feedPnl.style.color = '#00ff66';
-                        answerField.focus();
-                    } else {
-                        feedPnl.innerHTML = `❌ Terminal locked for ${secondsLeft}s`;
-                    }
+                        answerField.disabled = false; transmitBtn.disabled = false; transmitBtn.style.opacity = "1"; transmitBtn.style.cursor = "pointer";
+                        feedPnl.innerHTML = ""; answerField.focus();
+                    } else feedPnl.innerHTML = `❌ Terminal locked for ${secondsLeft}s`;
                 }, 1000);
 
             } else if (data.status === 'correct') {
                 clearInterval(cooldownInterval);
-                answerField.disabled = false;
-                transmitBtn.disabled = false;
-                transmitBtn.style.opacity = "1";
-                transmitBtn.style.cursor = "pointer";
-                feedPnl.innerHTML = data.message;
-                feedPnl.style.color = '#00ff66';
-                answerField.focus();
-            } else {
-                feedPnl.innerHTML = data.message;
+                answerField.disabled = false; transmitBtn.disabled = false; transmitBtn.style.opacity = "1"; transmitBtn.style.cursor = "pointer";
+                feedPnl.innerHTML = "";
+                nodes = nodes.filter(n => n.id !== data.questionId);
+                returnToMap();
             }
         });
 
         socket.on('gameOver', (data) => {
             clearInterval(cooldownInterval);
+            isNavigating = false;
+            document.getElementById('map-container').style.display = 'none';
+            document.getElementById("defusal-interface").style.display = "block";
             document.getElementById("control-panel").style.display = "none";
             const qBox = document.getElementById("question-box");
             const timerEl = document.getElementById("timer");
@@ -204,13 +270,11 @@
                 timerEl.innerText = "SAFE";
                 timerEl.style.color = "#00ff66";
                 timerEl.style.textShadow = "0 0 3vh #00ff66";
-                qBox.innerHTML = "<span style='color: #00ff66;'>CLEARED.<br>BOMB DEFUSED SUCCESSFULLY!</span>";
+                qBox.innerHTML = "<span style='color: #00ff66;'>ALL NODES CLEARED.<br>BOMB DEFUSED SUCCESSFULLY!</span>";
             }
         });
 
-        document.getElementById("player-answer").addEventListener("keyup", function(event) {
-            if (event.key === "Enter") { transmitCode(); }
-        });
+        document.getElementById("player-answer").addEventListener("keyup", function(event) { if (event.key === "Enter") transmitCode(); });
     </script>
 </body>
 </html>

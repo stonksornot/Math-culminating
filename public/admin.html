@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OVERSEER - ADMIN CONTROL</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            background-color: #0d0d0d; color: #e0e0e0; font-family: 'Courier New', monospace;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; margin: 0;
+        }
+        h1 { color: #ff3333; text-shadow: 0 0 15px #ff0000; font-size: 4vh; }
+        .launch-btn {
+            background-color: #111; color: #ff3333; border: 3px solid #ff3333;
+            padding: 3vh 5vw; font-size: 3vh; font-family: 'Courier New', monospace; font-weight: bold;
+            cursor: pointer; border-radius: 8px; transition: all 0.3s;
+            box-shadow: 0 0 15px rgba(255, 51, 51, 0.2);
+            margin-top: 5vh;
+        }
+        .launch-btn:hover {
+            background-color: #ff3333; color: #000; box-shadow: 0 0 30px #ff3333;
+        }
+    </style>
+</head>
+<body>
+    <h1>SYSTEM OVERSEER</h1>
+    <div style="color: #888;">WAIT UNTIL ALL SQUADS ARE REGISTERED BEFORE INITIATING.</div>
+
+    <button class="launch-btn" id="launch" onclick="initiateRound()">INITIATE BOMB RUN</button>
+
+    <script>
+        const socket = io();
+
+        function initiateRound() {
+            const btn = document.getElementById('launch');
+            btn.innerText = "ROUND ACTIVE";
+            btn.style.backgroundColor = "#00ff66";
+            btn.style.borderColor = "#00ff66";
+            btn.style.color = "#000";
+            btn.style.boxShadow = "0 0 30px #00ff66";
+            btn.onclick = null; // Prevent double clicking
+
+            socket.emit('adminStart');
+        }
+    </script>
+</body>
+</html>
