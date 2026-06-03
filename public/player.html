@@ -67,13 +67,37 @@
         
         let nodes = [];
         let obstacles = []; 
-        let teammates = {}; // Track other players
+        let teammates = {}; 
         
         const player = { x: 640, y: 360, radius: 10, speed: 2, color: '#00ff66' };
         const keys = { w: false, a: false, s: false, d: false };
 
-        window.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
-        window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
+        // FIX 1: Ignore keystrokes if player is actively typing inside an input field
+        window.addEventListener('keydown', (e) => { 
+            if (document.activeElement.tagName === 'INPUT') return;
+            if (keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; 
+        });
+        window.addEventListener('keyup', (e) => { 
+            if (document.activeElement.tagName === 'INPUT') return;
+            if (keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; 
+        });
+
+        function checkWallCollision(cx, cy, radius) {
+            for (let wall of obstacles) {
+                let testX = cx; 
+                let testY = cy;
+
+                if (cx < wall.x) testX = wall.x; 
+                else if (cx > wall.x + wall.width) testX = wall.x + wall.width;
+
+                if (cy < wall.y) testY = wall.y; 
+                else if (cy > wall.y + wall.height) testY = wall.y + wall.height;
+
+                let dist = Math.hypot(cx - testX, cy - testY);
+                if (dist <= radius) return true;
+            }
+            return false;
+        }
 
         function engageSystem() {
             const squadName = document.getElementById('team-name-input').value.trim();
@@ -91,55 +115,41 @@
             document.getElementById('lobby-screen').style.display = 'flex'; 
             document.getElementById('game-view').style.display = 'block';
 
-            // FIX: Lock the player in place while they wait in the lobby
             isNavigating = false;
             requestAnimationFrame(gameLoop);
 
             socket.on('roundStarted', () => {
-                // 1. Drop the lobby screen
                 document.getElementById("lobby-screen").style.display = 'none';
-
-                // 2. FORCE the map to display (in case ghost inputs hid it)
                 document.getElementById("map-container").style.display = 'flex';
                 document.getElementById("defusal-interface").style.display = 'none';
-
-                // 3. Unlock player movement
                 isNavigating = true; 
             });
         }
 
-        // Listen for the next wave of nodes from the server
         socket.on('nextWave', (newNodes) => {
             nodes = newNodes;
-
-            // Optional: Flash a cool alert or message so the team knows!
             const feedPnl = document.getElementById("feedback-pnl");
             feedPnl.style.color = "#00bcff";
             feedPnl.innerHTML = "WAVE CLEARED. NEW NODES INCOMING...";
             setTimeout(() => { feedPnl.innerHTML = ""; }, 3000);
         });
 
-        // Receive the shared map from the server
         socket.on('initMap', (mapData) => {
             obstacles = mapData.obstacles;
             nodes = mapData.nodes;
         });
 
-        // Track Teammate Movements
         socket.on('teammateMoved', (data) => {
             teammates[data.id] = data;
         });
 
-        // Remove teammate if they disconnect
         socket.on('teammateLeft', (id) => {
             delete teammates[id];
         });
 
-        // Listen for when a teammate solves a node
         socket.on('nodeSolvedByTeammate', (data) => {
             nodes = nodes.filter(n => n.id !== data.questionId);
             
-            // If the player is currently looking at the node that was just solved, kick them back to map
             if (window.activeQuestionId === data.questionId) {
                 alert(`NODE CLEARED BY SQUAD MEMBER: ${data.solvedBy}`);
                 returnToMap();
@@ -147,14 +157,10 @@
         });
 
         function gameLoop() {
-            // 1. REMOVE the early return so the map always draws!
-            // if (!isNavigating) return requestAnimationFrame(gameLoop); 
-
             let nextX = player.x;
             let nextY = player.y;
             let moved = false;
 
-            // 2. Wrap movement logic inside the navigation check
             if (isNavigating) {
                 if (keys.w) { nextY -= player.speed; moved = true; }
                 if (keys.s) { nextY += player.speed; moved = true; }
@@ -173,27 +179,79 @@
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // ... (Keep all your drawing code for Grid and Obstacles here) ...
+            // Grid
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= canvas.width; x += 50) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+            }
+            for (let y = 0; y <= canvas.height; y += 50) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+            }
 
-            // 3. Update the Nodes loop to prevent ghost collisions
+            // Obstacles
+            obstacles.forEach(obs => {
+                ctx.fillStyle = obs.color;
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+            });
+
+            // Question Nodes
             nodes.forEach(node => {
-                ctx.beginPath(); ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-                ctx.fillStyle = node.color; ctx.fill();
-                ctx.shadowBlur = 15; ctx.shadowColor = node.color; ctx.closePath();
+                ctx.beginPath(); 
+                ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+                ctx.fillStyle = node.color; 
+                ctx.fill();
+                ctx.shadowBlur = 15; 
+                ctx.shadowColor = node.color; 
+                ctx.closePath();
+                ctx.shadowBlur = 0; 
 
-                // Prevent triggering a defusal while trapped in the waiting lobby
                 if (isNavigating && Math.hypot(player.x - node.x, player.y - node.y) < player.radius + node.radius) {
                     triggerDefusal(node);
                 }
             });
 
-            // ... (Keep your Teammate and Player drawing code here) ...
+            // Teammates
+            Object.values(teammates).forEach(t => {
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, player.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#00bcff'; 
+                ctx.fill();
+                ctx.closePath();
+
+                ctx.fillStyle = '#aaa';
+                ctx.font = '14px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText(t.username, t.x, t.y - 15);
+            });
+
+            // Local Player
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = player.color; 
+            ctx.fill();
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = player.color;
+            ctx.closePath();
+            ctx.shadowBlur = 0; 
+
+            ctx.fillStyle = '#ffffff'; 
+            ctx.font = 'bold 14px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText("You", player.x, player.y - 15);
 
             requestAnimationFrame(gameLoop);
         }
 
         function triggerDefusal(node) {
             isNavigating = false; 
+            
+            // Clear out old leftover keys immediately when entering a terminal
+            keys.w = false; keys.a = false; keys.s = false; keys.d = false;
+            
             window.activeQuestionId = node.id;
             document.getElementById('question-box').innerHTML = node.text;
             document.getElementById('map-container').style.display = 'none'; 
@@ -205,7 +263,8 @@
             window.activeQuestionId = null;
             document.getElementById('defusal-interface').style.display = 'none'; 
             document.getElementById('map-container').style.display = 'flex'; 
-            player.y += 25; // Bump out of collision
+            
+            // FIX 2: Removed the arbitrary player.y += 25 bump. Node is gone, so collision naturally ends.
             isNavigating = true; 
         }
 

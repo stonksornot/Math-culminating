@@ -136,7 +136,7 @@
 </head>
 <body>
 
-    <div id="header-title"> Bomb defusal game</div>
+    <div id="header-title">Bomb Defusal Game</div>
     <div id="header-desc">Answer the questions correctly to advance. Bomb will explode if timer runs out</div>
 
     <div id="main-monitor-zone">
@@ -184,9 +184,6 @@
             addLogMessage(`<span class="log-join">⚡ Agent Joined: ${displayName}</span>`);
         });
 
-        // NOTE: The new Co-Op server uses 'feedback' and 'nodeSolvedByTeammate' instead of 'check'. 
-        // If you want live stream logs for wrong/right answers, you may need to add an io.emit('check', {...}) 
-        // to your index.js inside the submit handler!
         socket.on('check', (data) => {
             let actorName = data.username ? `<strong>${data.username} (${data.team})</strong>` : `<strong>${data.team}</strong>`;
             
@@ -203,117 +200,56 @@
 
         socket.on('leaderboardUpdate', (teamList) => {
             const container = document.getElementById('leaderboard-target');
+            
             if (teamList.length === 0) {
-                container.innerHTML = `<div style="text-align:center; padding-top:10vh; color:#555;">No active networks detected. Awaiting deployment...</div>`;
+                container.innerHTML = `<div style="text-align:center; padding-top:10vh; color:#555;">No active squads detected. Awaiting deployment...</div>`;
                 return;
             }
 
-            const groupedTeams = {};
-            teamList.forEach(player => {
-                if (!groupedTeams[player.team]) groupedTeams[player.team] = [];
-                groupedTeams[player.team].push(player);
-            });
+            let html = '';
+            teamList.forEach(teamData => {
+                // Generate alphanumeric-only ID to prevent syntax errors with weird squad names
+                const safeId = teamData.team.replace(/\W/g, '');
+                const isExpanded = expandedTeams.has(teamData.team);
+                const icon = isExpanded ? '▼' : '▶';
+                const detailsDisplay = isExpanded ? 'block' : 'none';
 
-            const compiledTeams = [];
-            for (const teamName in groupedTeams) {
-                const members = groupedTeams[teamName];
-                const n = members.length;
-
-                let totalScore = 0;
-                let totalTime = 0; 
-                let maxSolved = 0; 
-                let activeCount = 0;
-                let boomCount = 0;
-
-                members.forEach(m => {
-                    // Safety check to absolutely prevent NaN
-                    const indSolved = Number(m.solvedCount) || 0;
-                    const indTime = Number(m.timeLeft) || 0;
-
-                    totalScore += indSolved * 100; // Flat 100 points per node solved
-                    totalTime += indTime; 
-
-                    if (indSolved > maxSolved) maxSolved = indSolved; 
-                    if (m.status === 'active') activeCount++;
-                    if (m.status === 'boom') boomCount++;
-                });
-
-                let aggregateStatus = 'defused';
-                if (activeCount > 0) aggregateStatus = 'active';
-                else if (boomCount === n) aggregateStatus = 'boom';
-
-                compiledTeams.push({
-                    team: teamName,
-                    score: Math.round(totalScore),
-                    avgTimeLeft: totalTime / n, 
-                    maxSolved: maxSolved, 
-                    status: aggregateStatus,
-                    members: members,
-                    n: n
-                });
-            }
-
-            compiledTeams.sort((a, b) => {
-                if (b.score !== a.score) return b.score - a.score; 
-                return b.avgTimeLeft - a.avgTimeLeft; 
-            });
-
-            container.innerHTML = '';
-            compiledTeams.forEach(t => {
-                let statusText = '';
-                if (t.status === 'active') {
-                    statusText = `<span class="status-active">${t.score} PTS</span>`;
-                } else if (t.status === 'boom') {
-                    statusText = `<span class="status-boom">[🏆 ${t.score} PTS] 💥 DETONATED</span>`;
-                } else if (t.status === 'defused') {
-                    statusText = `<span class="status-defused">[🏆 ${t.score} PTS] 🛡️ SAFE</span>`;
+                let statusClass = 'status-active';
+                let statusText = `${Math.floor(teamData.timeLeft / 60).toString().padStart(2, '0')}:${(teamData.timeLeft % 60).toString().padStart(2, '0')}`;
+                
+                if (teamData.status === 'boom') { 
+                    statusClass = 'status-boom'; 
+                    statusText = 'DESTROYED'; 
+                }
+                if (teamData.status === 'defused') { 
+                    statusClass = 'status-defused'; 
+                    statusText = 'DEFUSED'; 
                 }
 
-                const isExpanded = expandedTeams.has(t.team);
-                const displayStyle = isExpanded ? 'block' : 'none';
-                const iconText = isExpanded ? '▼' : '▶';
-                
-                const safeTeamId = 't_' + t.team.replace(/[^a-zA-Z0-9]/g, '_');
-                const safeTeamNameStr = t.team.replace(/'/g, "\\'");
+                // Render main squad line
+                html += `
+                    <div class="team-row" onclick="toggleTeam('${teamData.team.replace(/'/g, "\\'")}', '${safeId}')">
+                        <div><span class="dropdown-icon" id="icon-${safeId}">${icon}</span> <strong>${teamData.team}</strong></div>
+                        <div class="${statusClass}">${teamData.solvedCount} Questions | ${statusText}</div>
+                    </div>
+                    <div class="team-details" id="details-${safeId}" style="display: ${detailsDisplay};">
+                `;
 
-                let playersHtml = '';
-                t.members.forEach(m => {
-                    // Safe parse values to prevent NaN
-                    let indTime = Number(m.timeLeft) || 0;
-                    let indSolved = Number(m.solvedCount) || 0;
-
-                    let pMin = Math.floor(indTime / 60);
-                    let pSec = indTime % 60;
-                    let pTime = `${pMin < 10 ? '0' + pMin : pMin}:${pSec < 10 ? '0' + pSec : pSec}`;
-                    let pScore = indSolved * 100; // Personal score contribution
-                    
-                    let pStatusClass = '';
-                    if(m.status === 'boom') pStatusClass = 'color: #ff3333; font-weight: bold; text-shadow: 0 0 5px #ff0000;';
-                    else if(m.status === 'defused') pStatusClass = 'color: #00ff66; font-weight: bold; text-shadow: 0 0 5px #00ff66;';
-                    else if(m.status === 'active') pStatusClass = 'color: #aaa;';
-
-                    // Replaced currentIndex with "Nodes Cleared"
-                    playersHtml += `
+                // Loop through nested team members provided by server
+                teamData.members.forEach(member => {
+                    let mStatus = member.status === 'boom' ? '💀' : (member.status === 'defused' ? '🛡️' : '🟢');
+                    html += `
                         <div class="player-row">
-                            <span>👤 ${m.username || 'Agent'}</span>
-                            <span style="${pStatusClass}">[🏆 ${pScore} PTS] ${indSolved} Nodes Cleared [🕒 ${pTime}]</span>
+                            <span>${mStatus} ${member.username}</span>
+                            <span>${member.solvedCount} solved</span>
                         </div>
                     `;
                 });
 
-                container.innerHTML += `
-                    <div class="team-row" onclick="toggleTeam('${safeTeamNameStr}', '${safeTeamId}')">
-                        <div>
-                            <span id="icon-${safeTeamId}" class="dropdown-icon">${iconText}</span>
-                            <strong>⚡ ${t.team}</strong>
-                        </div>
-                        ${statusText}
-                    </div>
-                    <div id="details-${safeTeamId}" class="team-details" style="display: ${displayStyle};">
-                        ${playersHtml}
-                    </div>
-                `;
+                html += `</div>`;
             });
+
+            container.innerHTML = html;
         });
     </script>
 </body>

@@ -6,7 +6,7 @@ let globalRoundActive = false;
 
 app.use(express.static('public'));
 
-// Master Question Bank (Expanded to demonstrate waves)
+// Master Question Bank
 const questions = [
     { question: "Question 1: Solve for x. <br> 2x^2 - 8 = 0", answer: "2" },
     { question: "Question 2: What is the vertex of <br> y = (x-3)^2 + 4?", answer: "(3,4)" },
@@ -50,12 +50,11 @@ function getWaveNodes(waveIndex, obstacles) {
     });
 }
 
-// UPDATED: Now includes safe-spawn zone logic
 function generateTeamMap() {
     const obstacles = [];
-    const spawnX = 640;  // <-- Adjust to match your client-side starting X
-    const spawnY = 360;  // <-- Adjust to match your client-side starting Y
-    const safeZone = 80; // Clearance radius in pixels
+    const spawnX = 640;  
+    const spawnY = 360;  
+    const safeZone = 80; 
 
     for(let i=0; i<7; i++) {
         let obsX, obsY, obsWidth, obsHeight;
@@ -81,14 +80,52 @@ function generateTeamMap() {
     }
 
     const initialNodes = getWaveNodes(0, obstacles);
-    return { obstacles, nodes: initialNodes, totalSolved: 0, currentWave: 0 };
+
+    // GLOBAL TRACKING: Map now holds the team-wide time property and interval states
+    return { 
+        obstacles, 
+        nodes: initialNodes, 
+        totalSolved: 0, 
+        currentWave: 0,
+        timeLeft: 150, 
+        intervalStarted: false,
+        interval: null
+    };
 }
 
 function updateLeaderboard() {
-    const list = Object.values(activeTeams).map(t => ({
-        username: t.username, team: t.team, solvedCount: t.solvedCount, timeLeft: t.timeLeft, status: t.status
-    }));
+    const teamAggregator = {};
 
+    // Group individual players into their respective squads
+    Object.values(activeTeams).forEach(player => {
+        if (!teamAggregator[player.team]) {
+            const mapRef = sharedTeamMaps[player.team];
+            teamAggregator[player.team] = {
+                team: player.team,
+                timeLeft: mapRef ? mapRef.timeLeft : 0,
+                solvedCount: 0,
+                status: player.status,
+                members: []
+            };
+        }
+
+        // Add player stats to the team totals
+        teamAggregator[player.team].solvedCount += player.solvedCount;
+        teamAggregator[player.team].members.push({
+            username: player.username,
+            solvedCount: player.solvedCount,
+            status: player.status
+        });
+
+        // Ensure global team status reflects if the bomb went off or was defused
+        if (player.status === 'boom' || player.status === 'defused') {
+            teamAggregator[player.team].status = player.status;
+        }
+    });
+
+    const list = Object.values(teamAggregator);
+
+    // Sort squads by Status -> Score -> Time Remaining
     list.sort((a, b) => {
         if (a.status === 'defused' && b.status !== 'defused') return -1;
         if (b.status === 'defused' && a.status !== 'defused') return 1;
@@ -102,43 +139,45 @@ function updateLeaderboard() {
 }
 
 function startTeamTimer(teamName) {
-    if (!sharedTeamMaps[teamName].intervalStarted) {
-        sharedTeamMaps[teamName].intervalStarted = true;
+    const teamMap = sharedTeamMaps[teamName];
+    if (!teamMap || teamMap.intervalStarted) return;
 
-        sharedTeamMaps[teamName].interval = setInterval(() => {
-            let teamTimeLeft = 0;
-            let hasActiveMembers = false;
-            let allDefused = true;
+    teamMap.intervalStarted = true;
 
-            Object.values(activeTeams).forEach(p => {
-                if (p.team === teamName) {
-                    if (p.status !== 'defused') {
-                        allDefused = false; 
-                    }
-                    if (p.status === 'active') {
-                        hasActiveMembers = true;
-                        p.timeLeft--;
-                        teamTimeLeft = p.timeLeft;
-                    }
+    teamMap.interval = setInterval(() => {
+        let hasActiveMembers = false;
+        let allDefused = true;
+
+        Object.values(activeTeams).forEach(p => {
+            if (p.team === teamName) {
+                if (p.status !== 'defused') {
+                    allDefused = false; 
                 }
-            });
-
-            if (allDefused) {
-                clearInterval(sharedTeamMaps[teamName].interval);
-                return; 
+                if (p.status === 'active') {
+                    hasActiveMembers = true;
+                }
             }
+        });
 
-            if (hasActiveMembers && teamTimeLeft <= 0) {
-                clearInterval(sharedTeamMaps[teamName].interval);
+        if (allDefused) {
+            clearInterval(teamMap.interval);
+            return; 
+        }
+
+        if (hasActiveMembers) {
+            teamMap.timeLeft--; // Tick down the single team-wide clock
+
+            if (teamMap.timeLeft <= 0) {
+                teamMap.timeLeft = 0;
+                clearInterval(teamMap.interval);
                 io.to(teamName).emit('gameOver', { status: 'boom' });
                 Object.values(activeTeams).forEach(p => { if (p.team === teamName) p.status = 'boom'; });
-                updateLeaderboard();
-            } else if (hasActiveMembers) {
-                io.to(teamName).emit('timerUpdate', teamTimeLeft);
-                updateLeaderboard();
+            } else {
+                io.to(teamName).emit('timerUpdate', teamMap.timeLeft);
             }
-        }, 1000);
-    }
+            updateLeaderboard();
+        }
+    }, 1000);
 }
 
 io.on('connection', (socket) => {
@@ -148,8 +187,13 @@ io.on('connection', (socket) => {
 
         socket.join(teamName);
 
+        // Individual player records metrics, but does NOT carry individual timeLeft anymore
         activeTeams[socket.id] = {
-            username: userName, team: teamName, solvedCount: 0, timeLeft: 150, status: 'active', interval: null, cooldownUntil: null
+            username: userName, 
+            team: teamName, 
+            solvedCount: 0, 
+            status: 'active', 
+            cooldownUntil: null
         };
 
         if (!sharedTeamMaps[teamName]) {
@@ -206,7 +250,6 @@ io.on('connection', (socket) => {
 
         if (data.answer === currentAnswer) {
             session.solvedCount++;
-
             const teamMap = sharedTeamMaps[session.team];
             teamMap.nodes = teamMap.nodes.filter(n => n.id !== qId);
             teamMap.totalSolved++;
@@ -214,24 +257,31 @@ io.on('connection', (socket) => {
             socket.emit('feedback', { status: 'correct', message: 'Answer correct', questionId: qId });
             socket.to(session.team).emit('nodeSolvedByTeammate', { questionId: qId, solvedBy: session.username });
 
+            // FIX: Broadcast success to the Control Center
+            io.emit('check', { status: 'correct', team: session.team, username: session.username, stage: teamMap.currentWave + 1 });
+
             if (teamMap.nodes.length > 0) {
-                Object.values(activeTeams).forEach(p => { if (p.team === session.team) p.timeLeft += 20; });
+                teamMap.timeLeft += 20; 
             } else {
                 teamMap.currentWave++;
                 const nextNodes = getWaveNodes(teamMap.currentWave, teamMap.obstacles);
 
                 if (nextNodes.length > 0) {
                     teamMap.nodes = nextNodes;
-                    Object.values(activeTeams).forEach(p => { if (p.team === session.team) p.timeLeft += 60; });
+                    teamMap.timeLeft += 60; 
                     io.to(session.team).emit('nextWave', nextNodes);
                 } else {
                     Object.values(activeTeams).forEach(p => { if (p.team === session.team) p.status = 'defused'; });
                     io.to(session.team).emit('gameOver', { status: 'defused' });
+                    // FIX: Broadcast defusal to the Control Center
+                    io.emit('check', { status: 'defused', team: session.team });
                 }
             }
         } else {
             session.cooldownUntil = Date.now() + 10000; 
             socket.emit('feedback', { status: 'incorrect', message: 'Answer wrong, cooldown for 10s' });
+            // FIX: Broadcast failure to the Control Center
+            io.emit('check', { status: 'incorrect', team: session.team, username: session.username, answer: data.answer });
         }
         updateLeaderboard();
     });
