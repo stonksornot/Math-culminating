@@ -6,16 +6,37 @@ let globalRoundActive = false;
 
 app.use(express.static('public'));
 
-// Master Question Bank
 const questions = [
-    { question: "Question 1: Solve for x. <br> 2x^2 - 8 = 0", answer: "2" },
-    { question: "Question 2: What is the vertex of <br> y = (x-3)^2 + 4?", answer: "(3,4)" },
-    { question: "Question 3: Evaluate <br> f(2) if f(x) = 3^x", answer: "9" },
-    { question: "Question 4: Solve for x. <br> 5x = 25", answer: "5" },
-    { question: "Question 5: Simplify <br> sqrt(16)", answer: "4" },
-    // -- WAVE 2 STARTS HERE --
-    { question: "Question 6: Solve for x. <br> 10 - 2x = 4", answer: "3" }, 
-    { question: "Question 7: What is 3^3?", answer: "27" }
+    // WAVE 1 EASY
+    { question: "Question 1: Solve for the largest x value satisfying <br> \\( x^2 - 6x + 8 = 0 \\)", answer: "4" },
+    { question: "Question 2: Find the product of a and b if <br> \\( (a + b)^2 = 1 \\) <br> \\( a^2 + b^2 = 5 \\)", answer: "-2" },
+    { question: "Question 3: Evaluate <br> \\(\\frac{\\sqrt{12} \\cdot \\sqrt{3}}{2}\\)", answer: "3" },
+    { question: "Question 4: Evaluate, in lowest fractions <br> \\( 16^{-\\frac{1}{2}}\\)", answer: "1/4"},
+    { question: "Question 5: Simplify <br> \\( \\sqrt{48} \\) <br> Use the following format a*sqrt(b)", answer: "4*sqrt(3)" },
+    // WAVE 2 MEDIUM EASY
+    { question: "Question 6: Solve for x <br> \\( 10 - 2x = 4 \\)", answer: "3" }, 
+    { question: "Question 7: What is the negative solution of x if <br> \\( \\frac{1}{x^2} = \\frac{3}{4x + 7} \\)?", answer: "-1" },
+    { question: "Question 8: Simplify (prime factorize), then find the sum of exponents \\( \\sqrt[3]{4^{100} \\cdot 2^{16} \\cdot 35^{33}} \\)", answer: "94"},
+    { question: "Question 9: Simplify <br> \\( (x^3y^2)\\cdot(x^{-1}y^4) \\) <br> Use spaces to seperate terms and ^ for powers", answer: "x^2 y^6"},
+    { question: "Question 10: Solve for a+b <br> \\( 1/a + 1/b = \\sqrt{24} \\) <br> \\( ab = \\sqrt{6} \\)", answer: "12" },
+    // WAVE 3 MEDIUM HARD
+    { question: "Question 11: Subtract the following. Express in a*sqrt(b) <br> \\( 4\\sqrt(12) - 2\\sqrt(27) \\)", answer: "2*sqrt(3)"},
+    { question: "Question 12: What is the GCD of these three expressions? <br> \\( x^3y^8z^5 \\) <br> \\( x^2y^4z^7 \\) <br> \\( x^2y^5z^6 \\) <br> Use spaces to seperate terms and ^ for powers", answer: "x^2 y^4 z^5"},
+    { question: "Question 13: Expressed as a fraction, what is the difference between the two roots of <br> \\( 16x^2 - 49 = 0 \\)", answer: "7/2"},
+    { question: "Question 14: Factor completely to solve. If <br> \\( x^2 - y^2 = 45 \\) and \\( x - y = 5 \\), what is the value of \\( x + y \\)?", answer: "9" },
+    { question: "Question 15: What is the product of the values of x that are not in the domain of the following expression? <br> \\( \\frac{3x}{x^2 - 8x + 15} \\)?", answer: "15" },
+    // WAVE 4 HARD
+    { question: "Question 16: Solve for all real x <br> \\( x = \\sqrt{20 - x} \\)", answer: "4" },
+    { question: "Question 17: When \\( \\frac{4}{x+3} - \\frac{2}{x-2} \\) is written as a single fraction <br> \\( \\frac{ax+b}{(x+3)(x-2)} \\) <br> Find the value of \\( a+b \\).", answer: "-12" },
+    { question: "Question 18: Bob is designing his rectangular backyard. The total area is \\( \\frac{x^2 - 4}{x+3} \\) and the width is \\( \\frac{x - 2}{x^2 + 3x}\\). <br> The length of the backyard can be expressed as \\( x(x + a) \\). Find a", answer: "2"},
+    { question: "Question 19: \\( 2^a = \\frac{4^{2t} \\cdot 8^{t/3}}{16^{t/2}} \\) <br> Find a in terms of t", answer: "3t"},
+    { question: "Question 20: Mr. Bean needs to travel from one corner of a rectangular prism to the diagonally opposite one. The sides are of length <br> \\( x + 2, x - 2, 2\\sqrt{2x} \\) <br> Find the shortest distance if he is allowed to travel through the interior of the prism in terms of x, divided by \\( \\sqrt{2} \\). Do not use spaces", answer: "x+2"},
+    // WAVE 5 HARD2
+    { question: "Question 21: Solve for x <br> \\( \\sqrt{x\\sqrt{x}} = 8 \\)", answer: "16" },
+    { question: "Question 22: \\( y = \\sqrt{1 + \\frac{2x + 1}{x^2}} <br> In which quadrants does the equation lie in? <br> Use space as seperators, and sort your answers from least to greatest \\)", answer: "1 2 3"},
+    { question: "Question 23: If \\( x + \\frac{1}{x} = 5 \\), what is the exact value of \\( x^2 + \\frac{1}{x^2} \\)?", answer: "23" },
+    { question: "Question 24: Solve for x (Beware of extraneous roots): <br> \\( \\sqrt{x+3} + \\sqrt{x-2} = 5 \\)", answer: "6" },
+    { question: "Question 25: Find the number of integer solutions of (x, y) given <br> \\( x^2 - y^2 = 120 \\)", answer: "16"}
 ];
 
 const WAVE_SIZE = 5; 
@@ -93,7 +114,8 @@ function generateTeamMap() {
     };
 }
 
-function updateLeaderboard() {
+// Change the function signature to accept a default null parameter
+function updateLeaderboard(targetSocket = null) {
     const teamAggregator = {};
 
     // Group individual players into their respective squads
@@ -135,7 +157,13 @@ function updateLeaderboard() {
         return b.timeLeft - a.timeLeft;
     });
 
-    io.emit('leaderboardUpdate', list);
+    // FIX HERE: If a specific socket requested this, only reply to them.
+    // Otherwise, broadcast it globally to everyone like normal.
+    if (targetSocket) {
+        targetSocket.emit('leaderboardUpdate', list);
+    } else {
+        io.emit('leaderboardUpdate', list);
+    }
 }
 
 function startTeamTimer(teamName) {
@@ -215,6 +243,11 @@ io.on('connection', (socket) => {
             startTeamTimer(teamName);
             socket.emit('roundStarted'); 
         }
+    });
+
+    socket.on('requestLeaderboardSync', () => {
+        // Pass the requesting socket directly into the handler
+        updateLeaderboard(socket);
     });
 
     socket.on('adminStart', () => {

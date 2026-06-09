@@ -156,6 +156,8 @@
     <script>
         const socket = io();
         const logBox = document.getElementById("feed-log");
+
+        socket.emit('requestLeaderboardSync');
         
         const expandedTeams = new Set();
 
@@ -188,7 +190,7 @@
             let actorName = data.username ? `<strong>${data.username} (${data.team})</strong>` : `<strong>${data.team}</strong>`;
             
             if (data.status === 'correct') {
-                addLogMessage(`<span class="log-correct">🔓 DEFUSE SUCCESS: ${actorName} cleared phase ${data.stage}!</span>`);
+                addLogMessage(`<span class="log-correct">🔓 DEFUSE SUCCESS: ${actorName} solved a problem!</span>`);
             } else if (data.status === 'incorrect') {
                 addLogMessage(`<span class="log-wrong">❌ FIREWALL TRIPPED: ${actorName} fed corrupt code "${data.answer}". -10s penalty!</span>`);
             } else if (data.status === 'boom') {
